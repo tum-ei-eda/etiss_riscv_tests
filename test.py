@@ -21,6 +21,7 @@ simple_mem_system.memseg_length_00=0x00100000
 [Plugin Logger]
 plugin.logger.logaddr={logaddr}
 plugin.logger.logmask={logaddr}
+
 [Plugin PrintInstruction]
 """
 
