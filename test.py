@@ -55,13 +55,13 @@ def log_failure(results_dir, base_name, output, error):
 
 p = argparse.ArgumentParser()
 
-p.add_argument("tests_dir")
-p.add_argument("etiss_exe")
-p.add_argument("--arch", default="RISCV")
-p.add_argument("--bits", default="32")
-p.add_argument("--runlevel", default="u")
-p.add_argument("--ext", default="imcfd")
-p.add_argument("--virt", default="p")
+p.add_argument("tests_dir", help="Path containing the compiled RISC-V test binaries")
+p.add_argument("etiss_exe", help="Path to bare_etiss_processor binary")
+p.add_argument("--arch", default="RISCV", help="The ETISS architecture to test")
+p.add_argument("--bits", default="32", help="Tests of which bitness to run. Can be '3264' for 32 and 64 bits.")
+p.add_argument("--runlevel", default="u", help="List of runlevels to test. Can be 'm', 's', 'u' or any combination.")
+p.add_argument("--ext", default="imcfd", help="List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.")
+p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
 
 args = p.parse_args()
 
