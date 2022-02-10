@@ -64,7 +64,7 @@ p.add_argument("--bits", default="32", help="Tests of which bitness to run. Can 
 p.add_argument("--runlevel", default="u", help="List of runlevels to test. Can be 'm', 's', 'u' or any combination.")
 p.add_argument("--ext", default="imcfd", help="List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.")
 p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
-
+p.add_argument("--timeout", default=5, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 args = p.parse_args()
 
 begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
@@ -102,7 +102,7 @@ for test_name in tqdm(sorted(tests_2)):
 		f.write(ETISS_CFG.format(test_file=test_file, arch=args.arch, logaddr=logaddr))
 
 	try:
-		etiss_proc = subprocess.run(["gdb", "-batch", f"-command={gdb_conf_name}", "-args", args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=5, check=True)
+		etiss_proc = subprocess.run(["gdb", "-batch", f"-command={gdb_conf_name}", "-args", args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
 
 		output = etiss_proc.stdout.decode("utf-8")
 		return_val = int(output.rsplit("done", 1)[-1].strip().split()[-1], 16)
