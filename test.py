@@ -94,13 +94,13 @@ def main():
 
 	p.add_argument("tests_dir", help="Path containing the compiled RISC-V test binaries")
 	p.add_argument("etiss_exe", help="Path to bare_etiss_processor binary")
-	p.add_argument("--arch", nargs="*", default="RISCV", help="The ETISS architecture to test")
+	p.add_argument("--arch", nargs="*", default="RISCV", help="The ETISS architecture(s) to test. Specify multiple architectures as a space-separated list.")
 	p.add_argument("--bits", default="32", help="Tests of which bitness to run. Can be '3264' for 32 and 64 bits.")
 	p.add_argument("--runlevel", default="u", help="List of runlevels to test. Can be 'm', 's', 'u' or any combination.")
 	p.add_argument("--ext", default="imcfd", help="List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.")
 	p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
 	p.add_argument("--timeout", default=5, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
-	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start.")
+	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 
 	args = p.parse_args()
 
