@@ -6,10 +6,13 @@ import os
 import pathlib
 import subprocess
 import tempfile
+from collections import defaultdict
+from functools import partial
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
@@ -47,59 +50,22 @@ def find_symbol_address(sym_name, elf_path):
 
 	raise ValueError("symobl %s not found", sym_name)
 
-def log_failure(results_dir, base_name, output, error):
-	with open(results_dir / f"{base_name}.stdout", "wb") as f:
-		f.write(output.stdout)
-	with open(results_dir / f"{base_name}.stderr", "wb") as f:
-		f.write(output.stderr)
-	with open(results_dir / "fail.txt", "a") as f:
-		f.write(f"{base_name}: {error}\n")
+def log_failure(results_path, base_name, output):
+	with open(results_path / f"{base_name}.stdout", "wb") as f:
+		if output.stdout:
+			f.write(output.stdout)
+	with open(results_path / f"{base_name}.stderr", "wb") as f:
+		if output.stderr:
+			f.write(output.stderr)
 
-p = argparse.ArgumentParser()
+def run_test(test_args, args, gdb_conf_name):
+	test_file, arch, results_path = test_args
 
-p.add_argument("tests_dir", help="Path containing the compiled RISC-V test binaries")
-p.add_argument("etiss_exe", help="Path to bare_etiss_processor binary")
-p.add_argument("--arch", default="RISCV", help="The ETISS architecture to test")
-p.add_argument("--bits", default="32", help="Tests of which bitness to run. Can be '3264' for 32 and 64 bits.")
-p.add_argument("--runlevel", default="u", help="List of runlevels to test. Can be 'm', 's', 'u' or any combination.")
-p.add_argument("--ext", default="imcfd", help="List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.")
-p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
-p.add_argument("--timeout", default=5, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
-args = p.parse_args()
-
-begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
-
-tests_path = pathlib.Path(args.tests_dir).resolve()
-results_path = pathlib.Path(f"results_{begin}_{args.arch}")
-
-results_path.mkdir()
-
-tests_2 = []
-
-fd, gdb_conf_name = tempfile.mkstemp(".gdb", "etiss_gdb_")
-
-with open(fd, "w") as f:
-	f.write(GDB_CFG)
-
-for n in tests_path.glob("*.dump"):
-	filename = n.stem
-
-	arch, virt, name = filename.split("-", 2)
-
-	bit = arch[2:4]
-	runlevel = arch[4]
-	ext = arch[5:]
-
-	if bit in args.bits and runlevel in args.runlevel and ext in args.ext and virt in args.virt:
-		tests_2.append(filename)
-
-for test_name in tqdm(sorted(tests_2)):
-	test_file = tests_path / test_name
 	logaddr = find_symbol_address("tohost", test_file)
 
 	fd, fname = tempfile.mkstemp(".ini", "etiss_dynamic_")
 	with open(fd, "w") as f:
-		f.write(ETISS_CFG.format(test_file=test_file, arch=args.arch, logaddr=logaddr))
+		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr))
 
 	try:
 		etiss_proc = subprocess.run(["gdb", "-batch", f"-command={gdb_conf_name}", "-args", args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
@@ -107,18 +73,87 @@ for test_name in tqdm(sorted(tests_2)):
 		output = etiss_proc.stdout.decode("utf-8")
 		return_val = int(output.rsplit("done", 1)[-1].strip().split()[-1], 16)
 
-		if return_val == 1:
-			with open(results_path / "pass.txt", "a") as f:
-				f.write(test_file.stem + "\n")
-		else:
-			log_failure(results_path, test_file.stem, etiss_proc, f"{return_val:08x}")
+		ret = (return_val == 1, f"{return_val:08x}")
+
+		if return_val != 1:
+			log_failure(results_path, test_file.stem, etiss_proc)
 
 	except subprocess.TimeoutExpired as e:
-		log_failure(results_path, test_file.stem, e, "timeout")
+		ret = (False, "timeout")
+		log_failure(results_path, test_file.stem, e)
 
 	except subprocess.CalledProcessError as e:
-		log_failure(results_path, test_file.stem, e, "exc errro")
+		ret = (False, "etiss error")
+		log_failure(results_path, test_file.stem, e)
 
 	os.remove(fname)
+	return arch, (test_file.stem, ret)
 
-os.remove(gdb_conf_name)
+def main():
+	p = argparse.ArgumentParser()
+
+	p.add_argument("tests_dir", help="Path containing the compiled RISC-V test binaries")
+	p.add_argument("etiss_exe", help="Path to bare_etiss_processor binary")
+	p.add_argument("--arch", nargs="*", default="RISCV", help="The ETISS architecture to test")
+	p.add_argument("--bits", default="32", help="Tests of which bitness to run. Can be '3264' for 32 and 64 bits.")
+	p.add_argument("--runlevel", default="u", help="List of runlevels to test. Can be 'm', 's', 'u' or any combination.")
+	p.add_argument("--ext", default="imcfd", help="List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.")
+	p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
+	p.add_argument("--timeout", default=5, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
+	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start.")
+
+	args = p.parse_args()
+
+	begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+
+	tests_path = pathlib.Path(args.tests_dir).resolve()
+	results_paths = []
+
+	for arch in args.arch:
+		p = pathlib.Path(f"results_{begin}_{args.bits}-{args.runlevel}-{args.ext}-{args.virt}_{arch}")
+		p.mkdir()
+		results_paths.append(p)
+
+	tests_2 = []
+
+	fd, gdb_conf_name = tempfile.mkstemp(".gdb", "etiss_gdb_")
+
+	with open(fd, "w") as f:
+		f.write(GDB_CFG)
+
+	for n in tests_path.glob("*.dump"):
+		filename = n.stem
+
+		arch, virt, name = filename.split("-", 2)
+
+		bit = arch[2:4]
+		runlevel = arch[4]
+		ext = arch[5:]
+
+		if bit in args.bits and runlevel in args.runlevel and ext in args.ext and virt in args.virt:
+			tests_2.append(filename)
+
+	test_files = [tests_path / test_name for test_name in tests_2]
+	test_args = []
+
+	for arch, results_path in zip(args.arch, results_paths):
+		test_args.extend([(test_file, arch, results_path) for test_file in test_files])
+
+	test_fun = partial(run_test, args=args, gdb_conf_name=gdb_conf_name)
+
+	results = (process_map(test_fun, test_args, max_workers=args.threads))
+	results_dict = defaultdict(list)
+
+	for r in results:
+		results_dict[r[0]].append(r[1])
+
+	for arch, results_path in zip(args.arch, results_paths):
+		with open(results_path / "pass.txt", "w") as pass_f, open(results_path / "fail.txt", "a") as fail_f:
+			for name, (result, reason) in sorted(results_dict[arch]):
+				f = pass_f if result else fail_f
+				f.write(f"{name}: {reason}\n")
+
+	os.remove(gdb_conf_name)
+
+if __name__ == "__main__":
+	main()
