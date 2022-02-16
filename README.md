@@ -43,6 +43,7 @@ options:
 A directory with the naming schema `results_<YYMMDD>_<hhmmss>_<ETISS_ARCH>` is created. This directory can contain 3 types of files:
 1) `pass.txt`: All passing tests are listed here
 2) `fail.txt`: All failing tests are listed here. Tests can fail for 3 reasons: The test case itself indicates failure, ETISS terminates prematurely, or ETISS does not terminate within a given timeframe (see Usage).
+A test case reports failure as any number > 1. This return code can be matched back to the failing test case by right-shifting the value by one. The result indicates the failing test case of the respective test run.
 3) `<test-name>.stdout` and `<test-name>.stderr` for each failing test, containing the output of ETISS and gdb on standard output and standard error, respectively.
 
 ## Working Principle
