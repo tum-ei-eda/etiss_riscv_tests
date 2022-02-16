@@ -21,7 +21,9 @@ All steps assumed to be executed in the source directory of this project.
 
 ```
 $ ./test.py -h
-usage: test.py [-h] [--arch [ARCH ...]] [--bits BITS] [--runlevel RUNLEVEL] [--ext EXT] [--virt VIRT] [--timeout TIMEOUT] [-j THREADS] tests_dir etiss_exe
+usage: test.py [-h] [--arch [ARCH ...]] [--bits BITS] [--runlevel RUNLEVEL]
+               [--ext EXT] [--virt VIRT] [--timeout TIMEOUT] [-j THREADS]
+               tests_dir etiss_exe
 
 positional arguments:
   tests_dir             Path containing the compiled RISC-V test binaries
@@ -29,14 +31,21 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --arch [ARCH ...]     The ETISS architecture(s) to test. Specify multiple architectures as a space-separated list.
-  --bits BITS           Tests of which bitness to run. Can be '3264' for 32 and 64 bits.
-  --runlevel RUNLEVEL   List of runlevels to test. Can be 'm', 's', 'u' or any combination.
-  --ext EXT             List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.
-  --virt VIRT           Virtualization levels to test. Can be 'p', 'v' or both.
-  --timeout TIMEOUT     Timeout to complete a test run, exceeding the timeout marks the test as failed.
+  --arch [ARCH ...]     The ETISS architecture(s) to test. Specify multiple
+                        architectures as a space-separated list.
+  --bits BITS           Tests of which bitness to run. Can be '3264' for 32
+                        and 64 bits.
+  --runlevel RUNLEVEL   List of runlevels to test. Can be 'm', 's', 'u' or any
+                        combination.
+  --ext EXT             List of standard extensions to test. Can be 'i', 'm',
+                        'a', 'c', 'f', 'd', 'zfh' or any combination.
+  --virt VIRT           Virtualization levels to test. Can be 'p', 'v' or
+                        both.
+  --timeout TIMEOUT     Timeout to complete a test run, exceeding the timeout
+                        marks the test as failed.
   -j THREADS, --threads THREADS
-                        Number of parallel threads to start. Assume CPU core count if no value is provided.
+                        Number of parallel threads to start. Assume CPU core
+                        count if no value is provided.
 ```
 
 ## Output
