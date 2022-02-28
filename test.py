@@ -11,7 +11,6 @@ from functools import partial
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
-from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 ETISS_CFG = """[StringConfigurations]
@@ -22,10 +21,14 @@ arch.cpu={arch}
 [IntConfigurations]
 simple_mem_system.memseg_origin_00=0x80000000
 simple_mem_system.memseg_length_00=0x00100000
+etiss.max_block_size=500
+
+[BoolConfigurations]
+simple_mem_system.print_dbus_access=true
 
 [Plugin Logger]
 plugin.logger.logaddr={logaddr}
-plugin.logger.logmask={logaddr}
+plugin.logger.logmask=0xFFFFFFFF
 
 [Plugin PrintInstruction]
 """
