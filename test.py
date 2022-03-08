@@ -56,7 +56,7 @@ def find_symbol_address(sym_name, elf_path):
 
 	raise ValueError("symobl %s not found", sym_name)
 
-def log_failure(results_path, base_name, output):
+def log_streams(results_path, base_name, output):
 	with open(results_path / f"{base_name}.stdout", "wb") as f:
 		if output.stdout:
 			f.write(output.stdout)
@@ -81,16 +81,16 @@ def run_test(test_args, args, gdb_conf_name):
 
 		ret = (return_val == 1, f"{return_val:08x}")
 
-		if return_val != 1:
-			log_failure(results_path, test_file.stem, etiss_proc)
+		#if return_val != 1:
+		log_streams(results_path / ("pass" if return_val == 1 else "fail"), test_file.stem, etiss_proc)
 
 	except subprocess.TimeoutExpired as e:
 		ret = (False, "timeout")
-		log_failure(results_path, test_file.stem, e)
+		log_streams(results_path / "fail", test_file.stem, e)
 
 	except subprocess.CalledProcessError as e:
 		ret = (False, "etiss error")
-		log_failure(results_path, test_file.stem, e)
+		log_streams(results_path / "fail", test_file.stem, e)
 
 	os.remove(fname)
 	return arch, (test_file.stem, ret)
@@ -118,6 +118,8 @@ def main():
 	for arch in args.arch:
 		p = pathlib.Path(f"results_{begin}_{args.bits}-{args.runlevel}-{args.ext}-{args.virt}_{arch}")
 		p.mkdir()
+		(p / "fail").mkdir()
+		(p / "pass").mkdir()
 		results_paths.append(p)
 
 	tests_2 = []
