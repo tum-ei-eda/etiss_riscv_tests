@@ -15,7 +15,7 @@ from tqdm.contrib.concurrent import process_map
 
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
-jit.type=TCCJIT
+jit.type={jit}JIT
 arch.cpu={arch}
 
 [IntConfigurations]
@@ -25,6 +25,9 @@ etiss.max_block_size=500
 
 [BoolConfigurations]
 simple_mem_system.print_dbus_access=true
+jit.debug=true
+jit.gcc.cleanup=true
+jit.verify=false
 
 [Plugin Logger]
 plugin.logger.logaddr={logaddr}
@@ -68,7 +71,7 @@ def run_test(test_args, args, gdb_conf_name):
 
 	fd, fname = tempfile.mkstemp(".ini", "etiss_dynamic_")
 	with open(fd, "w") as f:
-		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr))
+		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper()))
 
 	try:
 		etiss_proc = subprocess.run(["gdb", "-batch", f"-command={gdb_conf_name}", "-args", args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
@@ -104,7 +107,7 @@ def main():
 	p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
 	p.add_argument("--timeout", default=5, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
-
+	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
 	args = p.parse_args()
 
 	begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
