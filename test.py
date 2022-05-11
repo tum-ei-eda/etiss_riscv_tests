@@ -39,6 +39,7 @@ plugin.logger.logmask=0xFFFFFFFF
 GDB_CFG = """set breakpoint pending on
 break etiss::plugin::Logger::log
 run
+n
 printf "done\\n"
 x/wx buf
 """
@@ -105,7 +106,7 @@ def main():
 	p.add_argument("--runlevel", default="u", help="List of runlevels to test. Can be 'm', 's', 'u' or any combination.")
 	p.add_argument("--ext", default="imcfd", help="List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.")
 	p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
-	p.add_argument("--timeout", default=5, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
+	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
 	args = p.parse_args()
