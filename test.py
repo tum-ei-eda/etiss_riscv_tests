@@ -162,6 +162,10 @@ def main():
 				f = pass_f if result else fail_f
 				f.write(f"{name}: {reason}\n")
 
+	fails = [r[1][1][0] for r in results].count(False)
+
+	print(f"done, summary:\nexecuted {len(results)} tests\nfailed: {fails}")
+
 	os.remove(gdb_conf_name)
 
 if __name__ == "__main__":
