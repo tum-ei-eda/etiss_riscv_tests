@@ -162,9 +162,12 @@ def main():
 				f = pass_f if result else fail_f
 				f.write(f"{name}: {reason}\n")
 
-	fails = [r[1][1][0] for r in results].count(False)
+	fails = [r[1][0] for r in results if r[1][1][0]]
 
-	print(f"done, summary:\nexecuted {len(results)} tests\nfailed: {fails}")
+	print(f"done, summary:\nexecuted {len(results)} tests\nfailed: {len(fails)}")
+	if len(fails) > 0:
+		names = " ".join(fails)
+		print(f"failing: {names}")
 
 	os.remove(gdb_conf_name)
 
