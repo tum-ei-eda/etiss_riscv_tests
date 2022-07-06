@@ -4,7 +4,7 @@ Python script to run the [official RISC-V instruction test suite](https://github
 
 ## Prerequisites
 
-- Built ETISS with `bare_etiss_processor`
+- Built ETISS with `bare_etiss_processor`, must be built with debug symbols
 - Built RISC-V test suite, see link above for instructions
 - Working `gdb` for your host platform
 - Python 3.7 or newer
