@@ -78,12 +78,13 @@ def run_test(test_args, args, gdb_conf_name):
 		etiss_proc = subprocess.run(["gdb", "-batch", f"-command={gdb_conf_name}", "-args", args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
 
 		output = etiss_proc.stdout.decode("utf-8")
-		return_val = int(output.rsplit("done", 1)[-1].strip().split()[-1], 16)
+		return_val = int(output.rsplit("done", 1)[-1].strip().split()[-1], 16) >> 1
+		passed = return_val == 0
 
-		ret = (return_val == 1, f"{return_val:08x}")
+		ret = (passed, f"{return_val}")
 
 		#if return_val != 1:
-		log_streams(results_path / ("pass" if return_val == 1 else "fail"), test_file.stem, etiss_proc)
+		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc)
 
 	except subprocess.TimeoutExpired as e:
 		ret = (False, "timeout")
