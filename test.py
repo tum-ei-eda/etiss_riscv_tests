@@ -57,10 +57,14 @@ def find_symbol_address(sym_name, elf_path):
 
 	raise ValueError("symobl %s not found", sym_name)
 
-def log_streams(results_path, base_name, output):
+def log_streams(results_path, base_name, output, fail_addr=0):
 	with open(results_path / f"{base_name}.stdout", "wb") as f:
 		if output.stdout:
-			f.write(output.stdout)
+			if fail_addr:
+				out_str = output.stdout.replace(f"0x{fail_addr:016x}:".encode("utf-8"), f"------- fail above here ------\n0x{fail_addr:016x}:".encode("utf-8"))
+			else:
+				out_str = output.stdout
+			f.write(out_str)
 	with open(results_path / f"{base_name}.stderr", "wb") as f:
 		if output.stderr:
 			f.write(output.stderr)
@@ -69,9 +73,13 @@ def run_test(test_args, args, gdb_conf_name):
 	test_file, arch, results_path = test_args
 
 	logaddr = find_symbol_address("tohost", test_file)
+	try:
+		failaddr = find_symbol_address("fail", test_file)
+	except:
+		failaddr = 0
 
-	fd, fname = tempfile.mkstemp(".ini", "etiss_dynamic_")
-	with open(fd, "w") as f:
+	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
+	with open(fname, "w") as f:
 		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper()))
 
 	try:
@@ -83,8 +91,7 @@ def run_test(test_args, args, gdb_conf_name):
 
 		ret = (passed, f"{return_val}")
 
-		#if return_val != 1:
-		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc)
+		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr)
 
 	except subprocess.TimeoutExpired as e:
 		ret = (False, "timeout")
@@ -94,7 +101,6 @@ def run_test(test_args, args, gdb_conf_name):
 		ret = (False, "etiss error")
 		log_streams(results_path / "fail", test_file.stem, e)
 
-	os.remove(fname)
 	return arch, (test_file.stem, ret)
 
 def main():
@@ -122,6 +128,7 @@ def main():
 		p.mkdir()
 		(p / "fail").mkdir()
 		(p / "pass").mkdir()
+		(p / "config").mkdir()
 		results_paths.append(p)
 
 	tests_2 = []
