@@ -44,27 +44,33 @@ printf "done\\n"
 x/wx buf
 """
 
-def find_symbol_address(sym_name, elf_path):
-	with open(elf_path, "rb") as f:
-		elf = ELFFile(f)
-
-		symbol_tables = [x for x in elf.iter_sections() if isinstance(x, SymbolTableSection)]
-
-		for section in symbol_tables:
-			for symbol in section.iter_symbols():
-				if symbol.name == sym_name:
-					return symbol.entry["st_value"]
+def find_symbol_address(sym_name, symbol_tables: list[SymbolTableSection]):
+	for section in symbol_tables:
+		for symbol in section.iter_symbols():
+			if symbol.name == sym_name:
+				return symbol.entry["st_value"]
 
 	raise ValueError("symobl %s not found", sym_name)
 
-def log_streams(results_path, base_name, output, fail_addr=0):
+def add_annotation(out_str, addr, text):
+	a = f"0x{addr:016x}:"
+	b = f"{text}\n{a}"
+	return out_str.replace(a.encode("utf-8"), b.encode("utf-8"))
+
+def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: dict[int, str]=None):
 	with open(results_path / f"{base_name}.stdout", "wb") as f:
 		if output.stdout:
-			if fail_addr:
-				out_str = output.stdout.replace(f"0x{fail_addr:016x}:".encode("utf-8"), f"------- fail above here ------\n0x{fail_addr:016x}:".encode("utf-8"))
-			else:
-				out_str = output.stdout
+			out_str = output.stdout
+
+			if fail_addr is not None:
+				out_str = add_annotation(out_str, fail_addr, "----- fail above here -----")
+
+			if test_addrs is not None:
+				for addr, text in test_addrs.items():
+					out_str = add_annotation(out_str, addr, f"----- {text} -----")
+
 			f.write(out_str)
+
 	with open(results_path / f"{base_name}.stderr", "wb") as f:
 		if output.stderr:
 			f.write(output.stderr)
@@ -72,11 +78,29 @@ def log_streams(results_path, base_name, output, fail_addr=0):
 def run_test(test_args, args, gdb_conf_name):
 	test_file, arch, results_path = test_args
 
-	logaddr = find_symbol_address("tohost", test_file)
-	try:
-		failaddr = find_symbol_address("fail", test_file)
-	except:
-		failaddr = 0
+	with open(test_file, "rb") as f:
+		elf = ELFFile(f)
+
+		symbol_tables = [x for x in elf.iter_sections() if isinstance(x, SymbolTableSection)]
+
+		logaddr = find_symbol_address("tohost", symbol_tables)
+		try:
+			failaddr = find_symbol_address("fail", symbol_tables)
+		except:
+			failaddr = 0
+
+		test_addrs = {}
+
+		test_addr = 0
+		test_num = 2
+		while test_addr != -1:
+			try:
+				test_name = f"test_{test_num}"
+				test_addr = find_symbol_address(test_name, symbol_tables)
+				test_addrs[test_addr] = test_name
+				test_num += 1
+			except ValueError:
+				test_addr = -1
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
 	with open(fname, "w") as f:
@@ -91,15 +115,15 @@ def run_test(test_args, args, gdb_conf_name):
 
 		ret = (passed, f"{return_val}")
 
-		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr)
+		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr, test_addrs)
 
 	except subprocess.TimeoutExpired as e:
 		ret = (False, "timeout")
-		log_streams(results_path / "fail", test_file.stem, e)
+		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs)
 
 	except subprocess.CalledProcessError as e:
 		ret = (False, "etiss error")
-		log_streams(results_path / "fail", test_file.stem, e)
+		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs)
 
 	return arch, (test_file.stem, ret)
 
