@@ -44,7 +44,7 @@ printf "done\\n"
 x/wx buf
 """
 
-def find_symbol_address(sym_name, symbol_tables: list[SymbolTableSection]):
+def find_symbol_address(sym_name, symbol_tables: "list[SymbolTableSection]"):
 	for section in symbol_tables:
 		for symbol in section.iter_symbols():
 			if symbol.name == sym_name:
@@ -57,7 +57,7 @@ def add_annotation(out_str, addr, text):
 	b = f"{text}\n{a}"
 	return out_str.replace(a.encode("utf-8"), b.encode("utf-8"))
 
-def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: dict[int, str]=None):
+def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: "dict[int, str]"=None):
 	with open(results_path / f"{base_name}.stdout", "wb") as f:
 		if output.stdout:
 			out_str = output.stdout
