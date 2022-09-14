@@ -91,16 +91,10 @@ def run_test(test_args, args, gdb_conf_name):
 
 		test_addrs = {}
 
-		test_addr = 0
-		test_num = 2
-		while test_addr != -1:
-			try:
-				test_name = f"test_{test_num}"
-				test_addr = find_symbol_address(test_name, symbol_tables)
-				test_addrs[test_addr] = test_name
-				test_num += 1
-			except ValueError:
-				test_addr = -1
+		for section in symbol_tables:
+			for symbol in section.iter_symbols():
+				if symbol.name.startswith("test_"):
+					test_addrs[symbol.entry["st_value"]] = symbol.name
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
 	with open(fname, "w") as f:
