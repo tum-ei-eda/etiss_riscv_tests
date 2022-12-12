@@ -7,11 +7,19 @@ import pathlib
 import subprocess
 import tempfile
 from collections import defaultdict
+from enum import Flag
 from functools import partial
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from tqdm.contrib.concurrent import process_map
+
+
+class KeepLogType(Flag):
+	NONE = 0
+	STDOUT = 1
+	STDERR = 2
+	BOTH = 3
 
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
@@ -29,9 +37,10 @@ jit.debug=true
 jit.gcc.cleanup=true
 jit.verify=false
 
-[Plugin Logger]
-plugin.logger.logaddr={logaddr}
-plugin.logger.logmask=0xFFFFFFFF
+[Plugin FileLogger]
+plugin.filelogger.logaddr={logaddr}
+plugin.filelogger.logmask=0xFFFFFFFF
+plugin.filelogger.terminate_on_write=true
 
 [Plugin PrintInstruction]
 """
@@ -57,9 +66,9 @@ def add_annotation(out_str, addr, text):
 	b = f"{text}\n{a}"
 	return out_str.replace(a.encode("utf-8"), b.encode("utf-8"))
 
-def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: "dict[int, str]"=None):
-	with open(results_path / f"{base_name}.stdout", "wb") as f:
-		if output.stdout:
+def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: "dict[int, str]"=None, keep=KeepLogType.NONE):
+	if output.stdout and KeepLogType.STDOUT in keep:
+		with open(results_path / f"{base_name}.stdout", "wb") as f:
 			out_str = output.stdout
 
 			if fail_addr is not None:
@@ -71,8 +80,8 @@ def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs
 
 			f.write(out_str)
 
-	with open(results_path / f"{base_name}.stderr", "wb") as f:
-		if output.stderr:
+	if output.stderr and KeepLogType.STDERR in keep:
+		with open(results_path / f"{base_name}.stderr", "wb") as f:
 			f.write(output.stderr)
 
 def run_test(test_args, args, gdb_conf_name):
@@ -101,23 +110,27 @@ def run_test(test_args, args, gdb_conf_name):
 		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper()))
 
 	try:
-		etiss_proc = subprocess.run(["gdb", "-batch", f"-command={gdb_conf_name}", "-args", args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
+		etiss_proc = subprocess.run([args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
 
 		output = etiss_proc.stdout.decode("utf-8")
-		return_val = int(output.rsplit("done", 1)[-1].strip().split()[-1], 16) >> 1
+		return_val = int(output.rsplit("ETISS: Warning: FileLogger", 1)[0].strip().split()[-1]) >> 1
 		passed = return_val == 0
 
 		ret = (passed, f"{return_val}")
 
-		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr, test_addrs)
+		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr, test_addrs, args.keep_output)
+
+	except ValueError as e:
+		ret = (False, "no result")
+		log_streams(results_path / "fail", test_file.stem, etiss_proc, failaddr, test_addrs, args.keep_output)
 
 	except subprocess.TimeoutExpired as e:
 		ret = (False, "timeout")
-		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs)
+		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	except subprocess.CalledProcessError as e:
 		ret = (False, "etiss error")
-		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs)
+		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	return arch, (test_file.stem, ret)
 
@@ -134,7 +147,9 @@ def main():
 	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
+	p.add_argument("--keep-output", choices=[x.name.lower() for x in KeepLogType], default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
 	args = p.parse_args()
+	args.keep_output = KeepLogType[args.keep_output.upper()]
 
 	begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
 
