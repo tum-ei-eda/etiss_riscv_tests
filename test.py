@@ -42,7 +42,7 @@ plugin.filelogger.logaddr={logaddr}
 plugin.filelogger.logmask=0xFFFFFFFF
 plugin.filelogger.terminate_on_write=true
 
-[Plugin PrintInstruction]
+{trace_enable}[Plugin PrintInstruction]
 """
 
 GDB_CFG = """set breakpoint pending on
@@ -107,7 +107,7 @@ def run_test(test_args, args, gdb_conf_name):
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
 	with open(fname, "w") as f:
-		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper()))
+		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper(), trace_enable="" if args.trace else ";"))
 
 	try:
 		etiss_proc = subprocess.run([args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
@@ -148,6 +148,8 @@ def main():
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
 	p.add_argument("--keep-output", choices=[x.name.lower() for x in KeepLogType], default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
+	p.add_argument("--trace", action="store_true", help="Generate an instruction trace. Helpful for debugging.")
+
 	args = p.parse_args()
 	args.keep_output = KeepLogType[args.keep_output.upper()]
 
