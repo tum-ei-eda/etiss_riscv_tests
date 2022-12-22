@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import argparse
 import datetime
 import os
@@ -134,6 +135,7 @@ def main():
 	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
+	p.add_argument("--fail", action="store_true", help="Return non-zero exit code if at least one test failed.")
 	args = p.parse_args()
 
 	begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
@@ -194,5 +196,7 @@ def main():
 
 	os.remove(gdb_conf_name)
 
+	return fails
+
 if __name__ == "__main__":
-	main()
+	sys.exit(main())
