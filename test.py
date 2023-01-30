@@ -102,8 +102,7 @@ def run_test(test_args, args, gdb_conf_name):
 
 		for section in symbol_tables:
 			for symbol in section.iter_symbols():
-				if symbol.name.startswith("test_"):
-					test_addrs[symbol.entry["st_value"]] = symbol.name
+				test_addrs[symbol.entry["st_value"]] = symbol.name
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
 	with open(fname, "w") as f:
