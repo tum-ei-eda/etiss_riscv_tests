@@ -192,7 +192,12 @@ def main():
 
 	test_fun = partial(run_test, args=args, gdb_conf_name=gdb_conf_name)
 
-	results = (process_map(test_fun, test_args, max_workers=args.threads))
+	try:
+		results = (process_map(test_fun, test_args, max_workers=args.threads))
+	except KeyboardInterrupt:
+		print("terminated")
+		return
+
 	results_dict = defaultdict(list)
 
 	for r in results:
