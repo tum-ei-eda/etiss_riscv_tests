@@ -47,13 +47,6 @@ plugin.filelogger.terminate_on_write=true
 {trace_enable}[Plugin PrintInstruction]
 """
 
-GDB_CFG = """set breakpoint pending on
-break etiss::plugin::Logger::log
-run
-n
-printf "done\\n"
-x/wx buf
-"""
 
 def find_symbol_address(sym_name, symbol_tables: "list[SymbolTableSection]"):
 	for section in symbol_tables:
@@ -86,7 +79,7 @@ def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs
 		with open(results_path / f"{base_name}.stderr", "wb") as f:
 			f.write(output.stderr)
 
-def run_test(test_args, args, gdb_conf_name):
+def run_test(test_args, args):
 	test_file, arch, results_path = test_args
 
 	with open(test_file, "rb") as f:
@@ -169,11 +162,6 @@ def main():
 
 	tests_2 = []
 
-	fd, gdb_conf_name = tempfile.mkstemp(".gdb", "etiss_gdb_")
-
-	with open(fd, "w") as f:
-		f.write(GDB_CFG)
-
 	for n in tests_path.glob("*.dump"):
 		filename = n.stem
 
@@ -192,7 +180,7 @@ def main():
 	for arch, results_path in zip(args.arch, results_paths):
 		test_args.extend([(test_file, arch, results_path) for test_file in test_files])
 
-	test_fun = partial(run_test, args=args, gdb_conf_name=gdb_conf_name)
+	test_fun = partial(run_test, args=args)
 
 	try:
 		results = (process_map(test_fun, test_args, max_workers=args.threads))
