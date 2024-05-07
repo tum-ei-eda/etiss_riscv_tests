@@ -23,6 +23,7 @@ class KeepLogType(Flag):
 
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
+vp.coredsl_coverage_path={test_file.stem}.csv
 jit.type={jit}JIT
 arch.cpu={arch}
 
@@ -36,6 +37,7 @@ simple_mem_system.print_dbus_access=true
 jit.debug=true
 jit.gcc.cleanup=true
 jit.verify=false
+etiss.exit_on_loop=true
 
 [Plugin FileLogger]
 plugin.filelogger.logaddr={logaddr}
