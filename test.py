@@ -7,7 +7,7 @@ import pathlib
 import subprocess
 import tempfile
 from collections import defaultdict
-from enum import Flag
+from enum import IntFlag
 from functools import partial
 
 from elftools.elf.elffile import ELFFile
@@ -15,7 +15,7 @@ from elftools.elf.sections import SymbolTableSection
 from tqdm.contrib.concurrent import process_map
 
 
-class KeepLogType(Flag):
+class KeepLogType(IntFlag):
 	NONE = 0
 	STDOUT = 1
 	STDERR = 2
@@ -67,7 +67,7 @@ def add_annotation(out_str, addr, text):
 	return out_str.replace(a.encode("utf-8"), b.encode("utf-8"))
 
 def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: "dict[int, str]"=None, keep=KeepLogType.NONE):
-	if output.stdout and KeepLogType.STDOUT in keep:
+	if output.stdout and keep & KeepLogType.STDOUT:
 		with open(results_path / f"{base_name}.stdout", "wb") as f:
 			out_str = output.stdout
 
@@ -80,7 +80,7 @@ def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs
 
 			f.write(out_str)
 
-	if output.stderr and KeepLogType.STDERR in keep:
+	if output.stderr and keep & KeepLogType.STDERR:
 		with open(results_path / f"{base_name}.stderr", "wb") as f:
 			f.write(output.stderr)
 
