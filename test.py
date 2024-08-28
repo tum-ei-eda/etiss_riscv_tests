@@ -203,7 +203,5 @@ def main():
 
 	print(f"done, summary:\nexecuted {len(results)} tests\nfailed: {fails}")
 
-	os.remove(gdb_conf_name)
-
 if __name__ == "__main__":
 	main()
