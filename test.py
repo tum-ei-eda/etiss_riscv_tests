@@ -23,7 +23,7 @@ class KeepLogType(Flag):
 
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
-vp.coredsl_coverage_path={test_file.stem}.csv
+vp.coredsl_coverage_path={coverage_file}
 jit.type={jit}JIT
 arch.cpu={arch}
 
@@ -79,7 +79,7 @@ def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs
 		with open(results_path / f"{base_name}.stderr", "wb") as f:
 			f.write(output.stderr)
 
-def run_test(test_args, args):
+def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 	test_file, arch, results_path = test_args
 
 	with open(test_file, "rb") as f:
@@ -101,7 +101,7 @@ def run_test(test_args, args):
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
 	with open(fname, "w") as f:
-		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper(), trace_enable="" if args.trace else ";"))
+		f.write(ETISS_CFG.format(coverage_file=(results_path / "coverage" / test_file.stem).with_suffix(".csv").resolve(), test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper(), trace_enable="" if args.trace else ";"))
 
 	try:
 		etiss_proc = subprocess.run([args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
@@ -158,6 +158,7 @@ def main():
 		(p / "fail").mkdir()
 		(p / "pass").mkdir()
 		(p / "config").mkdir()
+		(p / "coverage").mkdir()
 		results_paths.append(p)
 
 	tests_2 = []
