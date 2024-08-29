@@ -37,7 +37,7 @@ simple_mem_system.print_dbus_access=true
 jit.debug=true
 jit.gcc.cleanup=true
 jit.verify=false
-etiss.exit_on_loop=true
+etiss.exit_on_loop={exit_on_loop}
 
 [Plugin FileLogger]
 plugin.filelogger.logaddr={logaddr}
@@ -101,7 +101,17 @@ def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
 	with open(fname, "w") as f:
-		f.write(ETISS_CFG.format(coverage_file=(results_path / "coverage" / test_file.stem).with_suffix(".csv").resolve(), test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper(), trace_enable="" if args.trace else ";"))
+		f.write(
+			ETISS_CFG.format(
+				coverage_file=(results_path / "coverage" / test_file.stem).with_suffix(".csv").resolve(),
+				test_file=test_file,
+				arch=arch,
+				logaddr=logaddr,
+				jit=args.jit.upper(),
+				trace_enable="" if args.trace else ";",
+				exit_on_loop=str(args.exit_on_loop)
+			)
+		)
 
 	try:
 		etiss_proc = subprocess.run([args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
@@ -143,6 +153,7 @@ def main():
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
 	p.add_argument("--keep-output", choices=[x.name.lower() for x in KeepLogType], default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
 	p.add_argument("--trace", action="store_true", help="Generate an instruction trace. Helpful for debugging.")
+	p.add_argument("--exit-on-loop", action="store_true", help="Instruct the simulator to terminate when a loop-to-self instruction sequence is detected.")
 
 	args = p.parse_args()
 	args.keep_output = KeepLogType[args.keep_output.upper()]
