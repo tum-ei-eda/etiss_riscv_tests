@@ -7,7 +7,7 @@ import pathlib
 import subprocess
 import tempfile
 from collections import defaultdict
-from enum import Flag
+from enum import IntFlag
 from functools import partial
 
 from elftools.elf.elffile import ELFFile
@@ -15,11 +15,12 @@ from elftools.elf.sections import SymbolTableSection
 from tqdm.contrib.concurrent import process_map
 
 
-class KeepLogType(Flag):
+class KeepLogType(IntFlag):
 	NONE = 0
 	STDOUT = 1
 	STDERR = 2
-	BOTH = 3
+	BOTH = STDOUT | STDERR
+
 
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
@@ -151,7 +152,7 @@ def main():
 	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
-	p.add_argument("--keep-output", choices=[x.name.lower() for x in KeepLogType], default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
+	p.add_argument("--keep-output", choices=[x.name.lower() for x in KeepLogType] + ["both"], default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
 	p.add_argument("--trace", action="store_true", help="Generate an instruction trace. Helpful for debugging.")
 	p.add_argument("--exit-on-loop", action="store_true", help="Instruct the simulator to terminate when a loop-to-self instruction sequence is detected.")
 
