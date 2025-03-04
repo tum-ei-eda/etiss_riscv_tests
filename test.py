@@ -7,7 +7,7 @@ import pathlib
 import subprocess
 import tempfile
 from collections import defaultdict
-from enum import Flag
+from enum import IntFlag
 from functools import partial
 
 from elftools.elf.elffile import ELFFile
@@ -15,11 +15,19 @@ from elftools.elf.sections import SymbolTableSection
 from tqdm.contrib.concurrent import process_map
 
 
-class KeepLogType(Flag):
+class KeepLogType(IntFlag):
 	NONE = 0
 	STDOUT = 1
 	STDERR = 2
-	BOTH = 3
+	BOTH = STDOUT | STDERR
+
+
+class TraceMode(IntFlag):
+	NONE = 0
+	INSTR = 1
+	MEM = 2
+	BOTH = INSTR | MEM
+
 
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
@@ -33,8 +41,8 @@ simple_mem_system.memseg_length_00=0x00100000
 etiss.max_block_size=500
 
 [BoolConfigurations]
-simple_mem_system.print_dbus_access=true
-jit.debug=true
+{trace_mem_enable}simple_mem_system.print_dbus_access=true
+{debug_jit_disable}jit.debug=false
 jit.gcc.cleanup=true
 jit.verify=false
 etiss.exit_on_loop={exit_on_loop}
@@ -44,7 +52,7 @@ plugin.filelogger.logaddr={logaddr}
 plugin.filelogger.logmask=0xFFFFFFFF
 plugin.filelogger.terminate_on_write=true
 
-{trace_enable}[Plugin PrintInstruction]
+{trace_instr_enable}[Plugin PrintInstruction]
 """
 
 
@@ -100,6 +108,8 @@ def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 				test_addrs[symbol.entry["st_value"]] = symbol.name
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
+	if args.debug_jit:
+		assert args.jit != "llvm", "LLVMJIT does not support debug mode"
 	with open(fname, "w") as f:
 		f.write(
 			ETISS_CFG.format(
@@ -108,7 +118,9 @@ def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 				arch=arch,
 				logaddr=logaddr,
 				jit=args.jit.upper(),
-				trace_enable="" if args.trace else ";",
+				trace_instr_enable="" if args.trace & TraceMode.INSTR else ";",
+				trace_mem_enable="" if args.trace & TraceMode.MEM else ";",
+				debug_jit_disable="" if not args.debug_jit else ";",
 				exit_on_loop=str(args.exit_on_loop)
 			)
 		)
@@ -151,12 +163,14 @@ def main():
 	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
-	p.add_argument("--keep-output", choices=[x.name.lower() for x in KeepLogType], default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
-	p.add_argument("--trace", action="store_true", help="Generate an instruction trace. Helpful for debugging.")
+	p.add_argument("--keep-output", choices=list(map(lambda x: x.lower(), KeepLogType.__members__.values())), default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
+	p.add_argument("--trace", choices=list(map(lambda x: x.lower(), TraceMode.__members__.values())), default=TraceMode.NONE.name.lower(), help="Generate an instr/mem trace. Helpful for debugging.")
+	p.add_argument("--debug-jit", action="store_true", help="Enable jit.debug (gcc/tcc jit only)")
 	p.add_argument("--exit-on-loop", action="store_true", help="Instruct the simulator to terminate when a loop-to-self instruction sequence is detected.")
 
 	args = p.parse_args()
 	args.keep_output = KeepLogType[args.keep_output.upper()]
+	args.trace = TraceMode[args.trace.upper()]
 
 	begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
 
