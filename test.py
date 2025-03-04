@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import argparse
 import datetime
 import os
@@ -167,6 +168,7 @@ def main():
 	p.add_argument("--trace", choices=list(map(lambda x: x.lower(), TraceMode.__members__.values())), default=TraceMode.NONE.name.lower(), help="Generate an instr/mem trace. Helpful for debugging.")
 	p.add_argument("--debug-jit", action="store_true", help="Enable jit.debug (gcc/tcc jit only)")
 	p.add_argument("--exit-on-loop", action="store_true", help="Instruct the simulator to terminate when a loop-to-self instruction sequence is detected.")
+	p.add_argument("--fail", action="store_true", help="Return non-zero exit code if at least one test failed.")
 
 	args = p.parse_args()
 	args.keep_output = KeepLogType[args.keep_output.upper()]
@@ -229,5 +231,7 @@ def main():
 
 	print(f"done, summary:\nexecuted {len(results)} tests\nfailed: {fails}")
 
+	return fails
+
 if __name__ == "__main__":
-	main()
+	sys.exit(main())
