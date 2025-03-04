@@ -163,8 +163,8 @@ def main():
 	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
-	p.add_argument("--keep-output", choices=[x.name.lower() for x in KeepLogType] + ["both"], default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
-	p.add_argument("--trace", choices=["none", "instr", "mem", "both"], default=TraceMode.NONE.name.lower(), help="Generate an instr/mem trace. Helpful for debugging.")
+	p.add_argument("--keep-output", choices=list(map(lambda x: x.lower(), KeepLogType.__members__.values())), default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
+	p.add_argument("--trace", choices=list(map(lambda x: x.lower(), TraceMode.__members__.values())), default=TraceMode.NONE.name.lower(), help="Generate an instr/mem trace. Helpful for debugging.")
 	p.add_argument("--debug-jit", action="store_true", help="Enable jit.debug (gcc/tcc jit only)")
 	p.add_argument("--exit-on-loop", action="store_true", help="Instruct the simulator to terminate when a loop-to-self instruction sequence is detected.")
 
