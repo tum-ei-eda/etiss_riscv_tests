@@ -1,3 +1,5 @@
 results_*
 .vscode
 venv
+tmp
+*.csv

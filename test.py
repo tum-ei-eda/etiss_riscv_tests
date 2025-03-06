@@ -8,14 +8,31 @@ import pathlib
 import subprocess
 import tempfile
 from collections import defaultdict
+from enum import IntFlag
 from functools import partial
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from tqdm.contrib.concurrent import process_map
 
+
+class KeepLogType(IntFlag):
+	NONE = 0
+	STDOUT = 1
+	STDERR = 2
+	BOTH = STDOUT | STDERR
+
+
+class TraceMode(IntFlag):
+	NONE = 0
+	INSTR = 1
+	MEM = 2
+	BOTH = INSTR | MEM
+
+
 ETISS_CFG = """[StringConfigurations]
 vp.elf_file={test_file}
+vp.coredsl_coverage_path={coverage_file}
 jit.type={jit}JIT
 arch.cpu={arch}
 
@@ -25,25 +42,20 @@ simple_mem_system.memseg_length_00=0x00100000
 etiss.max_block_size=500
 
 [BoolConfigurations]
-simple_mem_system.print_dbus_access=true
-jit.debug=true
+{trace_mem_enable}simple_mem_system.print_dbus_access=true
+{debug_jit_disable}jit.debug=false
 jit.gcc.cleanup=true
 jit.verify=false
+etiss.exit_on_loop={exit_on_loop}
 
-[Plugin Logger]
-plugin.logger.logaddr={logaddr}
-plugin.logger.logmask=0xFFFFFFFF
+[Plugin FileLogger]
+plugin.filelogger.logaddr={logaddr}
+plugin.filelogger.logmask=0xFFFFFFFF
+plugin.filelogger.terminate_on_write=true
 
-[Plugin PrintInstruction]
+{trace_instr_enable}[Plugin PrintInstruction]
 """
 
-GDB_CFG = """set breakpoint pending on
-break etiss::plugin::Logger::log
-run
-n
-printf "done\\n"
-x/wx buf
-"""
 
 def find_symbol_address(sym_name, symbol_tables: "list[SymbolTableSection]"):
 	for section in symbol_tables:
@@ -58,9 +70,9 @@ def add_annotation(out_str, addr, text):
 	b = f"{text}\n{a}"
 	return out_str.replace(a.encode("utf-8"), b.encode("utf-8"))
 
-def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: "dict[int, str]"=None):
-	with open(results_path / f"{base_name}.stdout", "wb") as f:
-		if output.stdout:
+def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs: "dict[int, str]"=None, keep=KeepLogType.NONE):
+	if output.stdout and KeepLogType.STDOUT in keep:
+		with open(results_path / f"{base_name}.stdout", "wb") as f:
 			out_str = output.stdout
 
 			if fail_addr is not None:
@@ -72,11 +84,11 @@ def log_streams(results_path, base_name, output, fail_addr: int=None, test_addrs
 
 			f.write(out_str)
 
-	with open(results_path / f"{base_name}.stderr", "wb") as f:
-		if output.stderr:
+	if output.stderr and KeepLogType.STDERR in keep:
+		with open(results_path / f"{base_name}.stderr", "wb") as f:
 			f.write(output.stderr)
 
-def run_test(test_args, args, gdb_conf_name):
+def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 	test_file, arch, results_path = test_args
 
 	with open(test_file, "rb") as f:
@@ -94,31 +106,48 @@ def run_test(test_args, args, gdb_conf_name):
 
 		for section in symbol_tables:
 			for symbol in section.iter_symbols():
-				if symbol.name.startswith("test_"):
-					test_addrs[symbol.entry["st_value"]] = symbol.name
+				test_addrs[symbol.entry["st_value"]] = symbol.name
 
 	fname = (results_path / "config" / test_file.stem).with_suffix(".ini")
+	if args.debug_jit:
+		assert args.jit != "llvm", "LLVMJIT does not support debug mode"
 	with open(fname, "w") as f:
-		f.write(ETISS_CFG.format(test_file=test_file, arch=arch, logaddr=logaddr, jit=args.jit.upper()))
+		f.write(
+			ETISS_CFG.format(
+				coverage_file=(results_path / "coverage" / test_file.stem).with_suffix(".csv").resolve(),
+				test_file=test_file,
+				arch=arch,
+				logaddr=logaddr,
+				jit=args.jit.upper(),
+				trace_instr_enable="" if args.trace & TraceMode.INSTR else ";",
+				trace_mem_enable="" if args.trace & TraceMode.MEM else ";",
+				debug_jit_disable="" if not args.debug_jit else ";",
+				exit_on_loop=str(args.exit_on_loop)
+			)
+		)
 
 	try:
-		etiss_proc = subprocess.run(["gdb", "-batch", f"-command={gdb_conf_name}", "-args", args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
+		etiss_proc = subprocess.run([args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
 
 		output = etiss_proc.stdout.decode("utf-8")
-		return_val = int(output.rsplit("done", 1)[-1].strip().split()[-1], 16) >> 1
+		return_val = int(output.rsplit("ETISS: Warning: FileLogger", 1)[0].strip().split()[-1]) >> 1
 		passed = return_val == 0
 
 		ret = (passed, f"{return_val}")
 
-		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr, test_addrs)
+		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr, test_addrs, args.keep_output)
+
+	except ValueError as e:
+		ret = (False, "no result")
+		log_streams(results_path / "fail", test_file.stem, etiss_proc, failaddr, test_addrs, args.keep_output)
 
 	except subprocess.TimeoutExpired as e:
 		ret = (False, "timeout")
-		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs)
+		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	except subprocess.CalledProcessError as e:
 		ret = (False, "etiss error")
-		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs)
+		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	return arch, (test_file.stem, ret)
 
@@ -135,8 +164,15 @@ def main():
 	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
+	p.add_argument("--keep-output", choices=list(map(lambda x: x.lower(), KeepLogType.__members__.values())), default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
+	p.add_argument("--trace", choices=list(map(lambda x: x.lower(), TraceMode.__members__.values())), default=TraceMode.NONE.name.lower(), help="Generate an instr/mem trace. Helpful for debugging.")
+	p.add_argument("--debug-jit", action="store_true", help="Enable jit.debug (gcc/tcc jit only)")
+	p.add_argument("--exit-on-loop", action="store_true", help="Instruct the simulator to terminate when a loop-to-self instruction sequence is detected.")
 	p.add_argument("--fail", action="store_true", help="Return non-zero exit code if at least one test failed.")
+
 	args = p.parse_args()
+	args.keep_output = KeepLogType[args.keep_output.upper()]
+	args.trace = TraceMode[args.trace.upper()]
 
 	begin = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
 
@@ -149,14 +185,10 @@ def main():
 		(p / "fail").mkdir()
 		(p / "pass").mkdir()
 		(p / "config").mkdir()
+		(p / "coverage").mkdir()
 		results_paths.append(p)
 
 	tests_2 = []
-
-	fd, gdb_conf_name = tempfile.mkstemp(".gdb", "etiss_gdb_")
-
-	with open(fd, "w") as f:
-		f.write(GDB_CFG)
 
 	for n in tests_path.glob("*.dump"):
 		filename = n.stem
@@ -176,9 +208,14 @@ def main():
 	for arch, results_path in zip(args.arch, results_paths):
 		test_args.extend([(test_file, arch, results_path) for test_file in test_files])
 
-	test_fun = partial(run_test, args=args, gdb_conf_name=gdb_conf_name)
+	test_fun = partial(run_test, args=args)
 
-	results = (process_map(test_fun, test_args, max_workers=args.threads))
+	try:
+		results = (process_map(test_fun, test_args, max_workers=args.threads))
+	except KeyboardInterrupt:
+		print("terminated")
+		return
+
 	results_dict = defaultdict(list)
 
 	for r in results:
@@ -193,8 +230,6 @@ def main():
 	fails = [r[1][1][0] for r in results].count(False)
 
 	print(f"done, summary:\nexecuted {len(results)} tests\nfailed: {fails}")
-
-	os.remove(gdb_conf_name)
 
 	return fails
 
