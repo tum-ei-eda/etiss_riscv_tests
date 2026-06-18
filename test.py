@@ -130,9 +130,11 @@ def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 
 	try:
 		t0 = time.time()
-		etiss_proc = subprocess.run([args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
+		etiss_args = [args.etiss_exe, f"-i{fname}"]
+		etiss_proc = subprocess.run(etiss_args, capture_output=True, timeout=args.timeout, check=True)
 
 		output = etiss_proc.stdout.decode("utf-8")
+		# print("output", output)
 		return_val = int(output.rsplit("ETISS: Warning: FileLogger", 1)[0].strip().split()[-1]) >> 1
 		passed = return_val == 0
 
@@ -172,7 +174,7 @@ def main():
 	p.add_argument("--runlevel", default="u", help="List of runlevels to test. Can be 'm', 's', 'u' or any combination.")
 	p.add_argument("--ext", default="imcfd", help="List of standard extensions to test. Can be 'i', 'm', 'a', 'c', 'f', 'd', 'zfh' or any combination.")
 	p.add_argument("--virt", default="p", help="Virtualization levels to test. Can be 'p', 'v' or both.")
-	p.add_argument("--timeout", default=10, type=int, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
+	p.add_argument("--timeout", default=10, type=float, help="Timeout to complete a test run, exceeding the timeout marks the test as failed.")
 	p.add_argument("-j", "--threads", type=int, help="Number of parallel threads to start. Assume CPU core count if no value is provided.")
 	p.add_argument("--jit", choices=["tcc", "gcc", "llvm"], default="tcc", help="Which ETISS JIT compiler to use.")
 	p.add_argument("--keep-output", choices=list(map(lambda x: x.name.lower(), KeepLogType.__members__.values())), default=KeepLogType.NONE.name.lower(), help="Save ETISS stdout/stderr to files")
@@ -200,6 +202,20 @@ def main():
 		results_paths.append(p)
 
 	tests_2 = []
+	enabled_exts = []
+	for ext in args.ext.split(","):
+		if len(ext) == 1:
+			enabled_exts.append(ext)
+			continue
+		assert len(ext) > 1
+		if ext[0] in ["z", "x"]:
+			enabled_exts.append(ext)
+		else:
+			# assert "x" not in ext
+			assert "z" not in ext, f"Ext: {ext}"
+			enabled_exts.extend(ext)
+	print("enabled_exts", enabled_exts)
+
 
 	for n in tests_path.glob("*.dump"):
 		filename = n.stem
@@ -210,7 +226,7 @@ def main():
 		runlevel = arch[4]
 		ext = arch[5:]
 
-		if bit in args.bits and runlevel in args.runlevel and ext in args.ext and virt in args.virt:
+		if bit in args.bits and runlevel in args.runlevel and ext in enabled_exts and virt in args.virt:
 			tests_2.append(filename)
 
 	test_files = [tests_path / test_name for test_name in tests_2]
