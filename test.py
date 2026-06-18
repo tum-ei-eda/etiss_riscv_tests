@@ -8,6 +8,7 @@ import os
 import pathlib
 import subprocess
 import tempfile
+import multiprocessing
 from collections import defaultdict
 from enum import IntFlag
 from functools import partial
@@ -221,7 +222,10 @@ def main():
 	test_fun = partial(run_test, args=args)
 
 	try:
-		results = (process_map(test_fun, test_args, max_workers=args.threads))
+		num_threads = args.threads or multiprocessing.cpu_count()
+		print(f"Using {num_threads} workers...")
+
+		results = (process_map(test_fun, test_args, max_workers=num_threads))
 	except KeyboardInterrupt:
 		print("terminated")
 		return
