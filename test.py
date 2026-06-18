@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import time
 import argparse
 import datetime
 import os
@@ -127,26 +128,35 @@ def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 		)
 
 	try:
+		t0 = time.time()
 		etiss_proc = subprocess.run([args.etiss_exe, f"-i{fname}"], capture_output=True, timeout=args.timeout, check=True)
 
 		output = etiss_proc.stdout.decode("utf-8")
 		return_val = int(output.rsplit("ETISS: Warning: FileLogger", 1)[0].strip().split()[-1]) >> 1
 		passed = return_val == 0
 
-		ret = (passed, f"{return_val}")
+		t1 = time.time()
+		td = t1 - t0
+		ret = (passed, f"{return_val}", td)
 
 		log_streams(results_path / ("pass" if passed else "fail"), test_file.stem, etiss_proc, failaddr, test_addrs, args.keep_output)
 
 	except ValueError as e:
-		ret = (False, "no result")
+		t1 = time.time()
+		td = t1 - t0
+		ret = (False, "no result", td)
 		log_streams(results_path / "fail", test_file.stem, etiss_proc, failaddr, test_addrs, args.keep_output)
 
 	except subprocess.TimeoutExpired as e:
-		ret = (False, "timeout")
+		t1 = time.time()
+		td = t1 - t0
+		ret = (False, "timeout", td)
 		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	except subprocess.CalledProcessError as e:
-		ret = (False, "etiss error")
+		ret = (False, "etiss error", td)
+		t1 = time.time()
+		td = t1 - t0
 		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	return arch, (test_file.stem, ret)
@@ -223,9 +233,9 @@ def main():
 
 	for arch, results_path in zip(args.arch, results_paths):
 		with open(results_path / "pass.txt", "w") as pass_f, open(results_path / "fail.txt", "a") as fail_f:
-			for name, (result, reason) in sorted(results_dict[arch]):
+			for name, (result, reason, duration) in sorted(results_dict[arch]):
 				f = pass_f if result else fail_f
-				f.write(f"{name}: {reason}\n")
+				f.write(f"{name}: {reason} [{duration:.2f}s]\n")
 
 	fails = [r[1][1][0] for r in results].count(False)
 
