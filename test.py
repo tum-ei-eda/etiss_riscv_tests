@@ -157,9 +157,9 @@ def run_test(test_args: "tuple[pathlib.Path, str, pathlib.Path]", args):
 		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	except subprocess.CalledProcessError as e:
-		ret = (False, "etiss error", td)
 		t1 = time.time()
 		td = t1 - t0
+		ret = (False, "etiss error", td)
 		log_streams(results_path / "fail", test_file.stem, e, failaddr, test_addrs, args.keep_output)
 
 	return arch, (test_file.stem, ret)
