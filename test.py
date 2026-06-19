@@ -204,6 +204,7 @@ def main():
 	tests_2 = []
 	enabled_exts = []
 	for ext in args.ext.split(","):
+		ext = ext.lower()
 		if len(ext) == 1:
 			enabled_exts.append(ext)
 			continue
@@ -224,7 +225,7 @@ def main():
 
 		bit = arch[2:4]
 		runlevel = arch[4]
-		ext = arch[5:]
+		ext = arch[5:].lower()
 
 		if bit in args.bits and runlevel in args.runlevel and ext in enabled_exts and virt in args.virt:
 			tests_2.append(filename)
